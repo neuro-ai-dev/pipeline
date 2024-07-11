@@ -1,4 +1,3 @@
-import json
 from argparse import Namespace
 
 import yaml
@@ -40,7 +39,7 @@ def init_dir(namespace: Namespace) -> None:
         readme="README.md",
     )
     with open(getattr(namespace, "file", "./pipeline.yaml"), "w") as f:
-        f.write(yaml.dump(json.loads(default_config.json()), sort_keys=False))
+        f.write(yaml.dump(default_config.dict(), sort_keys=False))
 
     with open("./new_pipeline.py", "w") as f:
         f.write(python_template)

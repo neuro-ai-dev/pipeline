@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
+from pipeline.container.frameworks.cog import CogManager
 from pipeline.container.logging import setup_logging
 from pipeline.container.manager import Manager
 from pipeline.container.routes import router
@@ -45,10 +46,18 @@ def create_app() -> FastAPI:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.execution_queue = asyncio.Queue()
-    pipeline_path = os.environ.get("PIPELINE_PATH")
-    if pipeline_path is None:
-        raise ValueError("PIPELINE_PATH environment variable is not set")
-    app.state.manager = Manager(pipeline_path=pipeline_path)
+
+    model_framework = os.environ.get("MODEL_FRAMEWORK")
+    if model_framework is None:
+        pipeline_path = os.environ.get("PIPELINE_PATH")
+        if not pipeline_path:
+            raise ValueError("PIPELINE_PATH environment variable is not set")
+        app.state.manager = Manager(pipeline_path=pipeline_path)
+    elif model_framework.lower() == "cog":
+        app.state.manager = CogManager()
+    else:
+        raise NotImplementedError(f"Model framework {model_framework} not supported")
+
     task = asyncio.create_task(
         execution_handler(app.state.execution_queue, app.state.manager)
     )
