@@ -47,6 +47,7 @@ class CogManager(Manager):
                     self._get_cog_model_inputs_and_output()
                 )
             except Exception as exc:
+                logger.exception("Pipeline failed to startup")
                 self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
                 self.pipeline_state_message = str(exc)
             else:
