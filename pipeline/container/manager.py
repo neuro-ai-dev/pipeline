@@ -10,6 +10,7 @@ from types import NoneType, UnionType
 from urllib import request
 from urllib.parse import urlparse
 
+import yaml
 from loguru import logger
 
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
@@ -90,6 +91,7 @@ class Manager:
             logger.info(f"Pipeline set to {self.pipeline_path}")
 
     def startup(self):
+        # TODO - make abstract
         if self.pipeline_state == pipeline_schemas.PipelineState.load_failed:
             return
         # add context to enable fetching of startup logs
@@ -241,6 +243,7 @@ class Manager:
     def run(
         self, run_id: str | None, input_data: t.List[run_schemas.RunInput] | None
     ) -> t.Any:
+        # TODO - make abstract
         with logger.contextualize(run_id=run_id):
             logger.info("Running pipeline")
             self.current_run = run_id
@@ -255,3 +258,33 @@ class Manager:
                 self.current_run = None
             logger.info("Run successful")
             return result
+
+    # def get_inputs(self):
+    # TODO - make abstract
+
+    def get_pipeline(self):
+        input_variables: list[pipeline_schemas.IOVariable] = []
+        output_variables: list[pipeline_schemas.IOVariable] = []
+
+        for variable in self.pipeline.variables:
+            if variable.is_input:
+                input_variables.append(variable.to_io_schema())
+
+            if variable.is_output:
+                output_variables.append(variable.to_io_schema())
+
+        # Load the YAML file to get the 'extras' field
+        try:
+            with open("/app/pipeline.yaml", "r") as file:
+                pipeline_config = yaml.safe_load(file)
+                extras = pipeline_config.get("extras", {})
+        except Exception as e:
+            raise Exception(f"Failed to load pipeline configuration: {str(e)}")
+
+        return pipeline_schemas.Pipeline(
+            name=self.pipeline_name,
+            image=self.pipeline_image,
+            input_variables=input_variables,
+            output_variables=output_variables,
+            extras=extras,
+        )

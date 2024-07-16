@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import yaml
 from loguru import logger
 
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
@@ -188,6 +189,34 @@ class CogManager(Manager):
         result = response.json()
         assert result["status"] == "succeeded"
         return result["output"]
+
+    def get_pipeline(self):
+        # TODO - fix and make DRY
+        input_variables: list[pipeline_schemas.IOVariable] = []
+        output_variables: list[pipeline_schemas.IOVariable] = []
+
+        # for variable in self.pipeline.variables:
+        #     if variable.is_input:
+        #         input_variables.append(variable.to_io_schema())
+
+        #     if variable.is_output:
+        #         output_variables.append(variable.to_io_schema())
+
+        # Load the YAML file to get the 'extras' field
+        try:
+            with open("/app/pipeline.yaml", "r") as file:
+                pipeline_config = yaml.safe_load(file)
+                extras = pipeline_config.get("extras", {})
+        except Exception as e:
+            raise Exception(f"Failed to load pipeline configuration: {str(e)}")
+
+        return pipeline_schemas.Pipeline(
+            name=self.pipeline_name,
+            image=self.pipeline_image,
+            input_variables=input_variables,
+            output_variables=output_variables,
+            extras=extras,
+        )
 
 
 @dataclass
