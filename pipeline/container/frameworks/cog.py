@@ -132,14 +132,15 @@ class CogManager(Manager):
         if not schema_output_type:
             raise ValueError("Could not find output type in cog OpenAPI schema")
         # for now, keep it simple
-        # if schema_output_type == "array":
-        #     list_schema_type = schema_output.get("items", {}).get("type")
-        #     python_list_type = self.TYPES_MAP.get(list_schema_type)
-        #     if not python_list_type:
-        #         raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
-        #     python_output_type = f"list[{python_list_type}]"
-        # else:
-        python_output_type = self.TYPES_MAP.get(schema_output_type)
+        if schema_output_type == "array":
+            list_schema_type = schema_output.get("items", {}).get("type")
+            python_list_type = self.TYPES_MAP.get(list_schema_type)
+            if not python_list_type:
+                raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
+            # TODO - what to do about this?
+            python_output_type = python_list_type
+        else:
+            python_output_type = self.TYPES_MAP.get(schema_output_type)
         if not python_output_type:
             raise ValueError(f"Unknown model ouput type found: {schema_output_type}")
         cog_output = CogOutput(python_type=python_output_type)

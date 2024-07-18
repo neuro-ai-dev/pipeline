@@ -21,17 +21,52 @@ def up_container(namespace: Namespace):
 
     config = config_file.read_text()
     pipeline_config_yaml = yaml.load(config, Loader=yaml.FullLoader)
-
     pipeline_config = PipelineConfig.parse_obj(pipeline_config_yaml)
-
     pipeline_name = pipeline_config.pipeline_name
     docker_client = docker.from_env()
+
     lc = LogConfig(
         type=LogConfig.types.JSON,
         config={
             "max-size": "1g",
         },
     )
+
+    gpu_ids: list | None = None
+    try:
+        gpu_ids = [
+            f"{i}"
+            for i in range(
+                0,
+                len(
+                    subprocess.check_output(
+                        [
+                            "nvidia-smi",
+                            "-L",
+                        ]
+                    )
+                    .decode()
+                    .splitlines()
+                ),
+            )
+        ]
+    except Exception:
+        gpu_ids = None
+
+    additional_container = None
+    extras = pipeline_config.extras or {}
+    if extras.get("model_framework", {}).get("framework", {}) == "cog":
+        try:
+            additional_container = _run_additional_container(
+                docker_client=docker_client,
+                image=f"{pipeline_name}--cog",
+                ports=[5000],
+                gpu_ids=gpu_ids,
+            )
+        except docker.errors.NotFound as e:
+            _print(f"Cog container did not start successfully:\n{e}", "ERROR")
+            return
+
     volumes: list | None = None
 
     port = int(getattr(namespace, "port", "14300"))
@@ -74,31 +109,10 @@ def up_container(namespace: Namespace):
 
             volumes.append(f"{local_path}:{container_path}")
 
-    gpu_ids: list | None = None
-    try:
-        gpu_ids = [
-            f"{i}"
-            for i in range(
-                0,
-                len(
-                    subprocess.check_output(
-                        [
-                            "nvidia-smi",
-                            "-L",
-                        ]
-                    )
-                    .decode()
-                    .splitlines()
-                ),
-            )
-        ]
-    except Exception:
-        gpu_ids = None
-
     # Stop container on python exit
     try:
         container = docker_client.containers.run(
-            pipeline_name,
+            image=pipeline_name,
             ports={f"{port}/tcp": int(port)},
             stderr=True,
             stdout=True,
@@ -108,7 +122,8 @@ def up_container(namespace: Namespace):
             detach=True,
             device_requests=(
                 [DeviceRequest(device_ids=gpu_ids, capabilities=[["gpu"]])]
-                if gpu_ids
+                # GPUs to be used by additional container if specified
+                if gpu_ids and not additional_container
                 else None
             ),
             command=run_command,
@@ -136,3 +151,40 @@ def up_container(namespace: Namespace):
         except docker.errors.NotFound:
             _print("Container did not start successfully", "ERROR")
             break
+
+    if additional_container:
+        additional_container.stop()
+        # additional_container.remove()
+
+
+def _run_additional_container(
+    docker_client: docker.DockerClient,
+    image: str,
+    ports: list[int] | None = None,
+    gpu_ids: list | None = None,
+    env_vars: dict[str, str] | None = None,
+):
+    ports = ports or []
+    lc = LogConfig(
+        type=LogConfig.types.JSON,
+        config={
+            "max-size": "1g",
+        },
+    )
+    container = docker_client.containers.run(
+        image=image,
+        ports={f"{port}/tcp": port for port in ports},
+        stderr=True,
+        stdout=True,
+        log_config=lc,
+        remove=True,
+        auto_remove=True,
+        detach=True,
+        device_requests=(
+            [DeviceRequest(device_ids=gpu_ids, capabilities=[["gpu"]])]
+            if gpu_ids
+            else None
+        ),
+        environment=env_vars or {},
+    )
+    return container
