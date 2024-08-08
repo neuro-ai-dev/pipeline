@@ -111,7 +111,6 @@ class CogManager(Manager):
                 python_type = self.TYPES_MAP[val["type"]]
             except KeyError:
                 raise ValueError(f"Unknown type found: {val['type']}")
-            default = val.get("default", None)
             cog_inputs.append(
                 CogInput(
                     name=name,
@@ -119,7 +118,8 @@ class CogManager(Manager):
                     python_type=python_type,
                     description=val.get("description", ""),
                     title=val.get("title", name),
-                    default=default,
+                    default=val.get("default", None),
+                    format=val.get("format", None),
                 )
             )
             # api_inputs.append(f'"{name}": kwargs.{name}')
@@ -169,6 +169,9 @@ class CogManager(Manager):
             if run_input.type == run_schemas.RunIOType.file:
                 # TODO - decide what we want to do here
                 raise NotImplementedError("File input not implemented yet")
+            # ignore things like empty URLs, which raise validation errors in Cog's API
+            if cog_input.format and not run_input.value:
+                continue
             inputs[cog_input.name] = run_input.value
         return inputs
 
@@ -255,6 +258,7 @@ class CogInput:
     # value: Any
     default: t.Any | None = None
     title: str | None = None
+    format: str | None = None
 
     # @property
     # def python_type(self) -> type:
