@@ -43,10 +43,11 @@ class CogManager(Manager):
             logger.info("Waiting for Cog pipeline to startup...")
 
             try:
-                self._wait_for_cog_startup()
+                self._wait_for_cog_startup(until_fully_ready=False)
                 self.cog_model_inputs, self.cog_model_output = (
                     self._get_cog_model_inputs_and_output()
                 )
+                self._wait_for_cog_startup(until_fully_ready=True)
             except Exception as exc:
                 logger.exception("Pipeline failed to startup")
                 self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
@@ -55,7 +56,7 @@ class CogManager(Manager):
                 self.pipeline_state = pipeline_schemas.PipelineState.loaded
                 logger.info("Pipeline started successfully")
 
-    def _wait_for_cog_startup(self):
+    def _wait_for_cog_startup(self, until_fully_ready: bool = True):
         max_retries = 100
         i = 0
         while i < max_retries:
@@ -76,6 +77,8 @@ class CogManager(Manager):
                 return
             elif status == "STARTING":
                 logger.info("Cog model starting...")
+                if not until_fully_ready:
+                    return
             elif status == "SETUP_FAILED":
                 logs = result["setup"].get("logs")
                 raise Exception(f"Cog model setup failed: {logs}")
@@ -85,6 +88,7 @@ class CogManager(Manager):
 
     def _get_cog_model_inputs_and_output(self):
         """Returns inputs in same order as they are defined in Cog predict function"""
+        logger.info("Getting Cog model inputs and output...")
         response = self.api_client.get("/openapi.json")
         schema = response.json()
         inputs = (
