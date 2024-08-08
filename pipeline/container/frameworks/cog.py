@@ -112,10 +112,6 @@ class CogManager(Manager):
             except KeyError:
                 raise ValueError(f"Unknown type found: {val['type']}")
             default = val.get("default", None)
-            print(f"ROSSLOG: before {default=}")
-            if default is not None:
-                default = json.dumps(default)
-                print(f"ROSSLOG: after {default=}")
             cog_inputs.append(
                 CogInput(
                     name=name,
