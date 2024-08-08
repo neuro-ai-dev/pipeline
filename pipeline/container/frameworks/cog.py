@@ -112,8 +112,10 @@ class CogManager(Manager):
             except KeyError:
                 raise ValueError(f"Unknown type found: {val['type']}")
             default = val.get("default", None)
+            print(f"ROSSLOG: before {default=}")
             if default is not None:
                 default = json.dumps(default)
+                print(f"ROSSLOG: after {default=}")
             cog_inputs.append(
                 CogInput(
                     name=name,
@@ -179,7 +181,9 @@ class CogManager(Manager):
     ) -> t.Any:
         with logger.contextualize(run_id=run_id):
             logger.info("Running Cog pipeline")
+            print(f"ROSSLOG raw inputs = {input_data}")
             inputs = self._parse_inputs(input_data)
+            print(f"ROSSLOG parsed inputs = {inputs}")
             try:
                 result = self._call_cog_prediction(inputs)
             except Exception as exc:
