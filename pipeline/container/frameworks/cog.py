@@ -1,9 +1,9 @@
+import json
 import os
 import time
 import traceback
 import typing as t
 from dataclasses import dataclass
-from typing import Any
 
 import httpx
 from loguru import logger
@@ -111,17 +111,17 @@ class CogManager(Manager):
                 python_type = self.TYPES_MAP[val["type"]]
             except KeyError:
                 raise ValueError(f"Unknown type found: {val['type']}")
-            # default = val.get("default", None)
-            # if default is not None:
-            #     default = json.dumps(default)
+            default = val.get("default", None)
+            if default is not None:
+                default = json.dumps(default)
             cog_inputs.append(
                 CogInput(
                     name=name,
                     order=order,
                     python_type=python_type,
-                    # desc=val.get("description", ""),
-                    # title=val.get("title", name),
-                    # default=default,
+                    description=val.get("description", ""),
+                    title=val.get("title", name),
+                    default=default,
                 )
             )
             # api_inputs.append(f'"{name}": kwargs.{name}')
@@ -155,7 +155,7 @@ class CogManager(Manager):
 
     def _parse_inputs(
         self, input_data: list[run_schemas.RunInput] | None
-    ) -> dict[str, Any]:
+    ) -> dict[str, t.Any]:
         # Return a dict of {name: value} for all inputs
         inputs = {}
         input_data = input_data or []
@@ -186,7 +186,7 @@ class CogManager(Manager):
                 raise RunnableError(exception=exc, traceback=traceback.format_exc())
             return result
 
-    def _call_cog_prediction(self, input_data: dict[str, Any]):
+    def _call_cog_prediction(self, input_data: dict[str, t.Any]):
         try:
             response = self.api_client.post(
                 "/predictions", timeout=15 * 60, json={"input": input_data}
@@ -249,10 +249,12 @@ class CogManager(Manager):
 class CogInput:
     order: int
     name: str
+    description: str
     # json_schema_type: str
     python_type: type
     # value: Any
-    # default: Any | None = None
+    default: t.Any | None = None
+    title: str | None = None
 
     # @property
     # def python_type(self) -> type:
@@ -269,7 +271,10 @@ class CogInput:
     def to_io_schema(self) -> IOVariable:
         return IOVariable(
             run_io_type=run_schemas.RunIOType.from_object(self.python_type),
-            title=self.name,
+            title=self.title,
+            description=self.description,
+            optional=True,
+            default=self.default,
         )
 
 
