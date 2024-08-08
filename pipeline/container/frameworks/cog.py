@@ -192,8 +192,14 @@ class CogManager(Manager):
                 "/predictions", timeout=15 * 60, json={"input": input_data}
             )
             response.raise_for_status()
-        except Exception as exc:
+        except httpx.RequestError as exc:
             raise Exception("API call to /predictions failed") from exc
+        except httpx.HTTPStatusError as exc:
+            raise Exception(
+                f"API call to /predictions failed: "
+                f"{exc.response.status_code} - {exc.response.text}."
+            )
+
         result = response.json()
         assert result["status"] == "succeeded"
         return result["output"]
