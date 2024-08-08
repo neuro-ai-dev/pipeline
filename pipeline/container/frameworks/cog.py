@@ -66,7 +66,8 @@ class CogManager(Manager):
                 response = self.api_client.get("/health-check")
                 result = response.json()
                 status = result["status"]
-            except Exception:
+            except Exception as e:
+                logger.info(f"Exception caught when polling /health-check : {e}")
                 pass
 
             if status == "READY":
@@ -78,6 +79,7 @@ class CogManager(Manager):
                 logs = result["setup"].get("logs")
                 raise Exception(f"Cog model setup failed: {logs}")
             time.sleep(5)
+            logger.info("Sleeping for 5s...")
         raise Exception("Cog model failed to load")
 
     def _get_cog_model_inputs_and_output(self):
