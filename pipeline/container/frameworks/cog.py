@@ -10,6 +10,7 @@ from loguru import logger
 
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
 from pipeline.cloud.schemas import runs as run_schemas
+from pipeline.cloud.schemas.pipelines import IOVariable
 from pipeline.container.manager import Manager
 from pipeline.exceptions import RunInputException, RunnableError
 
@@ -32,9 +33,9 @@ class CogManager(Manager):
         base_url = os.environ.get("COG_API_URL", "http://localhost:5000")
         self.api_client = httpx.Client(base_url=base_url)
 
-        self.cog_model_inputs = None
+        self.cog_model_inputs: list[CogInput] | None = None
         # Cog models always have a single output
-        self.cog_model_output = None
+        self.cog_model_output: CogOutput | None = None
 
     def startup(self):
         # add context to enable fetching of startup logs
@@ -196,7 +197,16 @@ class CogManager(Manager):
     def get_pipeline(self):
         # TODO - fix and make DRY
         input_variables: list[pipeline_schemas.IOVariable] = []
-        output_variables: list[pipeline_schemas.IOVariable] = []
+
+        if self.cog_model_inputs is None:
+            raise ValueError("Cog model inputs not found")
+        if self.cog_model_output is None:
+            raise ValueError("Cog model output not found")
+
+        for input in self.cog_model_inputs:
+            input_variables.append(input.to_io_schema())
+
+        output_variables: list[IOVariable] = [self.cog_model_output.to_io_schema()]
 
         # for variable in self.pipeline.variables:
         #     if variable.is_input:
@@ -246,8 +256,18 @@ class CogInput:
     #         return types_map[ self.json_schema_type ]
     #     except KeyError:
     #         raise ValueError(f"Unknown type found: {self.json_schema_type}")
+    def to_io_schema(self) -> IOVariable:
+        return IOVariable(
+            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
+            title=self.name,
+        )
 
 
 @dataclass
 class CogOutput:
     python_type: type
+
+    def to_io_schema(self) -> IOVariable:
+        return IOVariable(
+            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
+        )
