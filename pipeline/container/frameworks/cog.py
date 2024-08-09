@@ -301,10 +301,10 @@ class CogManager(Manager):
             and output.startswith("data:")
         ):
             logger.debug("Saving output file...")
-            mime_type = mimetypes.guess_type(output)[0]
+            mime_type = mimetypes.guess_type(output, strict=False)[0]
             if not mime_type:
                 raise ValueError(f"Unknown MIME type for output: {output[:20]}...")
-            file_ext = mimetypes.guess_extension(mime_type)
+            file_ext = mimetypes.guess_extension(mime_type, strict=False)
             if not file_ext:
                 raise ValueError(f"Unknown file extension for MIME type: {mime_type}")
             output_path = Path(f"/tmp/outputs/{str(uuid.uuid4())}{file_ext}")
