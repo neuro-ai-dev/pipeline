@@ -129,7 +129,7 @@ class CogManager(Manager):
         # make sure they match up.
         cog_inputs.sort(key=lambda x: x.order)
 
-        # Cog models always have a single output
+        # Cog models always have a single output (but could be an array)
         schema_output = (
             schema.get("components", {}).get("schemas", {}).get("Output", {})
         )
@@ -138,12 +138,11 @@ class CogManager(Manager):
             raise ValueError("Could not find output type in cog OpenAPI schema")
         # for now, keep it simple
         if schema_output_type == "array":
-            list_schema_type = schema_output.get("items", {}).get("type")
-            python_list_type = self.TYPES_MAP.get(list_schema_type)
-            if not python_list_type:
-                raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
-            # TODO - what to do about this?
-            python_output_type = python_list_type
+            # list_schema_type = schema_output.get("items", {}).get("type")
+            # python_list_type = self.TYPES_MAP.get(list_schema_type)
+            # if not python_list_type:
+            #     raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
+            python_output_type = list
         else:
             python_output_type = self.TYPES_MAP.get(schema_output_type)
         if not python_output_type:
