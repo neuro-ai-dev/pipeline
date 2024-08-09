@@ -160,14 +160,14 @@ class CogManager(Manager):
         cog_inputs: list[CogInput] = []
         for name, val in inputs.items():
             if "type" not in val:
-                logger.info(f"Skipping input '{name}' since type unknown")
+                logger.info(f"No 'type' found for input '{name}'; assuming string")
                 continue
             try:
                 order = val["x-order"]
             except KeyError:
                 raise ValueError(f"No x-order found for input '{name}'")
             try:
-                python_type = self.TYPES_MAP[val["type"]]
+                python_type = self.TYPES_MAP[val.get("type", "string")]
             except KeyError:
                 raise ValueError(f"Unknown type found: {val['type']}")
             cog_inputs.append(
