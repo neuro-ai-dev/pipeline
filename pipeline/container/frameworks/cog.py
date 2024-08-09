@@ -1,18 +1,75 @@
-import json
+import mimetypes
 import os
 import time
 import traceback
 import typing as t
+import uuid
+from base64 import b64decode
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 from loguru import logger
 
+from pipeline import File
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
 from pipeline.cloud.schemas import runs as run_schemas
 from pipeline.cloud.schemas.pipelines import IOVariable
 from pipeline.container.manager import Manager
 from pipeline.exceptions import RunInputException, RunnableError
+
+
+@dataclass
+class CogInput:
+    order: int
+    name: str
+    description: str
+    # json_schema_type: str
+    python_type: type
+    # value: Any
+    default: t.Any | None = None
+    title: str | None = None
+    format: str | None = None
+
+    # @property
+    # def python_type(self) -> type:
+    #     types_map = {
+    #         "string": str,
+    #         "number": float,
+    #         "integer": int,
+    #         "boolean": bool,
+    #     }
+    #     try:
+    #         return types_map[ self.json_schema_type ]
+    #     except KeyError:
+    #         raise ValueError(f"Unknown type found: {self.json_schema_type}")
+    def to_io_schema(self) -> IOVariable:
+        return IOVariable(
+            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
+            title=self.title,
+            description=self.description,
+            optional=True,
+            default=self.default,
+        )
+
+
+@dataclass
+class ArrayItems:
+    python_type: type
+    format: str | None = None
+
+
+@dataclass
+class CogOutput:
+    python_type: type
+    format: str | None = None
+    # only used if python_type=list
+    items: ArrayItems | None = None
+
+    def to_io_schema(self) -> IOVariable:
+        return IOVariable(
+            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
+        )
 
 
 # TODO - maybe abstract more stuff out of Manager
@@ -36,6 +93,8 @@ class CogManager(Manager):
         self.cog_model_inputs: list[CogInput] | None = None
         # Cog models always have a single output
         self.cog_model_output: CogOutput | None = None
+        save_output_files = os.environ.get("SAVE_OUTPUT_FILES", "")
+        self.save_output_files = save_output_files.lower() == "true"
 
     def startup(self):
         # add context to enable fetching of startup logs
@@ -138,16 +197,26 @@ class CogManager(Manager):
             raise ValueError("Could not find output type in cog OpenAPI schema")
         # for now, keep it simple
         if schema_output_type == "array":
-            # list_schema_type = schema_output.get("items", {}).get("type")
-            # python_list_type = self.TYPES_MAP.get(list_schema_type)
-            # if not python_list_type:
-            #     raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
-            python_output_type = list
+            list_items = schema_output.get("items", {})
+            list_schema_type = list_items.get("type")
+            python_list_type = self.TYPES_MAP.get(list_schema_type)
+            if not python_list_type:
+                raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
+            cog_output = CogOutput(
+                python_type=list,
+                items=ArrayItems(
+                    python_type=python_list_type, format=list_items.get("format")
+                ),
+            )
         else:
             python_output_type = self.TYPES_MAP.get(schema_output_type)
-        if not python_output_type:
-            raise ValueError(f"Unknown model ouput type found: {schema_output_type}")
-        cog_output = CogOutput(python_type=python_output_type)
+            if not python_output_type:
+                raise ValueError(
+                    f"Unknown model ouput type found: {schema_output_type}"
+                )
+            cog_output = CogOutput(
+                python_type=python_output_type, format=schema_output.get("format")
+            )
         return cog_inputs, cog_output
 
     def _parse_inputs(
@@ -205,7 +274,47 @@ class CogManager(Manager):
 
         result = response.json()
         assert result["status"] == "succeeded"
-        return result["output"]
+        output = result["output"]
+        if self.save_output_files:
+            output = self._save_output_files(
+                output=output, cog_output_spec=self.cog_model_output
+            )
+        return output
+
+    def _save_output_files(
+        self, output: t.Any, cog_output_spec: CogOutput | ArrayItems | None
+    ):
+        if isinstance(output, list):
+            new_outputs: list[t.Any] = []
+            for item in output:
+                new_output = self._save_output_files(
+                    output=item, cog_output_spec=cog_output_spec.items
+                )
+                new_outputs.append(new_output)
+            return new_outputs
+
+        if (
+            cog_output_spec is not None
+            and cog_output_spec.python_type == str
+            and cog_output_spec.format == "uri"
+            and isinstance(output, str)
+            and output.startswith("data:")
+        ):
+            logger.debug("Saving output file...")
+            mime_type = mimetypes.guess_type(output)[0]
+            if not mime_type:
+                raise ValueError(f"Unknown MIME type for output: {output[:20]}...")
+            file_ext = mimetypes.guess_extension(mime_type)
+            output_path = Path(f"/tmp/outputs/{str(uuid.uuid4())}{file_ext}")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Remove prefix, eg "data:image/webp;base64,"
+            data = output.split("base64,", 1)[-1]
+            output_path.write_bytes(b64decode(data))
+            return File(path=output_path, allow_out_of_context_creation=True)
+        else:
+            # else return original output
+            return output
 
     def get_pipeline(self):
         # TODO - fix and make DRY
@@ -245,48 +354,4 @@ class CogManager(Manager):
             # TODO - what's this actually used for?
             # extras=extras,
             extras=None,
-        )
-
-
-@dataclass
-class CogInput:
-    order: int
-    name: str
-    description: str
-    # json_schema_type: str
-    python_type: type
-    # value: Any
-    default: t.Any | None = None
-    title: str | None = None
-    format: str | None = None
-
-    # @property
-    # def python_type(self) -> type:
-    #     types_map = {
-    #         "string": str,
-    #         "number": float,
-    #         "integer": int,
-    #         "boolean": bool,
-    #     }
-    #     try:
-    #         return types_map[ self.json_schema_type ]
-    #     except KeyError:
-    #         raise ValueError(f"Unknown type found: {self.json_schema_type}")
-    def to_io_schema(self) -> IOVariable:
-        return IOVariable(
-            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
-            title=self.title,
-            description=self.description,
-            optional=True,
-            default=self.default,
-        )
-
-
-@dataclass
-class CogOutput:
-    python_type: type
-
-    def to_io_schema(self) -> IOVariable:
-        return IOVariable(
-            run_io_type=run_schemas.RunIOType.from_object(self.python_type),
         )
