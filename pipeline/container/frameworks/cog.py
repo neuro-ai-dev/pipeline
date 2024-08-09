@@ -305,12 +305,16 @@ class CogManager(Manager):
             if not mime_type:
                 raise ValueError(f"Unknown MIME type for output: {output[:20]}...")
             file_ext = mimetypes.guess_extension(mime_type)
+            if not file_ext:
+                raise ValueError(f"Unknown file extension for MIME type: {mime_type}")
             output_path = Path(f"/tmp/outputs/{str(uuid.uuid4())}{file_ext}")
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Remove prefix, eg "data:image/webp;base64,"
             data = output.split("base64,", 1)[-1]
             output_path.write_bytes(b64decode(data))
+            # TODO - remove
+            logger.debug(f"{output_path=}")
             return File(path=output_path, allow_out_of_context_creation=True)
         else:
             # else return original output
