@@ -161,7 +161,6 @@ class CogManager(Manager):
         for name, val in inputs.items():
             if "type" not in val:
                 logger.info(f"No 'type' found for input '{name}'; assuming string")
-                continue
             try:
                 order = val["x-order"]
             except KeyError:
