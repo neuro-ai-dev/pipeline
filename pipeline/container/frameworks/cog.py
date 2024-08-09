@@ -179,11 +179,12 @@ class CogManager(Manager):
     ) -> t.Any:
         with logger.contextualize(run_id=run_id):
             logger.info("Running Cog pipeline")
-            print(f"ROSSLOG raw inputs = {input_data}")
+            logger.debug(f"raw inputs = {input_data}")
             inputs = self._parse_inputs(input_data)
-            print(f"ROSSLOG parsed inputs = {inputs}")
+            logger.debug(f"parsed inputs = {inputs}")
             try:
                 result = self._call_cog_prediction(inputs)
+                logger.debug(f"{result=}")
             except Exception as exc:
                 raise RunnableError(exception=exc, traceback=traceback.format_exc())
             return result
