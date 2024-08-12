@@ -72,11 +72,22 @@ def push_container(namespace: Namespace):
         pipeline_config.pipeline_graph.split(":")[0] + ".py"
     ).read_text()
     pipeline_code = "```python\n" + pipeline_code + "\n```"
-    pipeline_config.readme = pipeline_config.readme.format(
-        pipeline_name=pipeline_config.pipeline_name,
-        pipeline_yaml=pipeline_yaml_text,
-        pipeline_code=pipeline_code,
-    )
+    try:
+        pipeline_config.readme = pipeline_config.readme.format(
+            pipeline_name=pipeline_config.pipeline_name,
+            pipeline_yaml=pipeline_yaml_text,
+            pipeline_code=pipeline_code,
+        )
+    except KeyError as exc:
+        _print(
+            f"Failed to generate README: {exc!r}\n"
+            "You may need to escape certain characters, eg change `{ }` to `{{ }}`",
+            "ERROR",
+        )
+        return
+    except Exception as exc:
+        _print(f"Failed to generate README: {exc!r}", "ERROR")
+        raise
 
     pipeline_name = (
         pipeline_config.pipeline_name.split(":")[0]
