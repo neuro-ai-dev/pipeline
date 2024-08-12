@@ -74,13 +74,10 @@ def convert_cog(pipeline_name: str) -> PipelineConfig:
         pipeline_graph="",
         pipeline_name=pipeline_name,
         accelerator_memory=None,
-        # TODO - maybe change to using structured field (Converter)?
-        # converter=Converter(framework="cog", options={"image": cog_image_name}),
         # use a format which permits extra framework-specific options in future
         extras={
             "model_framework": {
                 "framework": "cog",
-                # "image": cog_image_name,
             }
         },
         readme="README.md",

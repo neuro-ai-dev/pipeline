@@ -24,25 +24,11 @@ class CogInput:
     order: int
     name: str
     description: str
-    # json_schema_type: str
     python_type: type
-    # value: Any
     default: t.Any | None = None
     title: str | None = None
     format: str | None = None
 
-    # @property
-    # def python_type(self) -> type:
-    #     types_map = {
-    #         "string": str,
-    #         "number": float,
-    #         "integer": int,
-    #         "boolean": bool,
-    #     }
-    #     try:
-    #         return types_map[ self.json_schema_type ]
-    #     except KeyError:
-    #         raise ValueError(f"Unknown type found: {self.json_schema_type}")
     def to_io_schema(self) -> IOVariable:
         return IOVariable(
             run_io_type=run_schemas.RunIOType.from_object(self.python_type),
@@ -180,7 +166,6 @@ class CogManager(Manager):
                     format=val.get("format", None),
                 )
             )
-            # api_inputs.append(f'"{name}": kwargs.{name}')
 
         # Now order the inputs based on the x-order attribute.
         # We must do this since pipeline doesn't use named inputs, so we need to
@@ -232,7 +217,6 @@ class CogManager(Manager):
                 f"inputs ({len(self.cog_model_inputs)})"
             )
         for run_input, cog_input in zip(input_data, self.cog_model_inputs):
-            # input_schema = run_schemas.RunInput.parse_obj(item)
             if run_input.type == run_schemas.RunIOType.file:
                 # TODO - decide what we want to do here
                 raise NotImplementedError("File input not implemented yet")
@@ -312,15 +296,12 @@ class CogManager(Manager):
             # Remove prefix, eg "data:image/webp;base64,"
             data = output.split("base64,", 1)[-1]
             output_path.write_bytes(b64decode(data))
-            # TODO - remove
-            logger.debug(f"{output_path=}")
             return File(path=output_path, allow_out_of_context_creation=True)
         else:
             # else return original output
             return output
 
     def get_pipeline(self):
-        # TODO - fix and make DRY
         input_variables: list[pipeline_schemas.IOVariable] = []
 
         if self.cog_model_inputs is None:
@@ -333,28 +314,12 @@ class CogManager(Manager):
 
         output_variables: list[IOVariable] = [self.cog_model_output.to_io_schema()]
 
-        # for variable in self.pipeline.variables:
-        #     if variable.is_input:
-        #         input_variables.append(variable.to_io_schema())
-
-        #     if variable.is_output:
-        #         output_variables.append(variable.to_io_schema())
-
-        # Load the YAML file to get the 'extras' field
-        # try:
-        #     with open("/app/pipeline.yaml", "r") as file:
-        #         pipeline_config = yaml.safe_load(file)
-        #         extras = pipeline_config.get("extras", {})
-        # except Exception as e:
-        #     raise Exception(f"Failed to load pipeline configuration: {str(e)}")
-
         return pipeline_schemas.Pipeline(
-            # TODO - what's this actually used for?
-            name="unknown",
+            # TODO - update with real pipeline name? not sure if actually used anywhere?
+            name="cog-wrapper-pipeline",
             image="unknown",
             input_variables=input_variables,
             output_variables=output_variables,
             # TODO - what's this actually used for?
-            # extras=extras,
             extras=None,
         )

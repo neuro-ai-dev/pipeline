@@ -49,15 +49,12 @@ async def lifespan(app: FastAPI):
 
     model_framework = os.environ.get("MODEL_FRAMEWORK")
     if model_framework is None:
-        # TODO - remove
-        logger.info("Not using Cog")
         pipeline_path = os.environ.get("PIPELINE_PATH")
         if not pipeline_path:
             raise ValueError("PIPELINE_PATH environment variable is not set")
         app.state.manager = Manager(pipeline_path=pipeline_path)
     elif model_framework.lower() == "cog":
-        # TODO - remove
-        logger.info("Using Cog")
+        logger.debug("Using Cog")
         app.state.manager = CogManager()
     else:
         raise NotImplementedError(f"Model framework {model_framework} not supported")
