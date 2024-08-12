@@ -53,15 +53,28 @@ def up_container(namespace: Namespace):
     except Exception:
         gpu_ids = None
 
+    image = pipeline_name
     additional_container = None
+    additional_network = None
     extras = pipeline_config.extras or {}
-    if extras.get("model_framework", {}).get("framework", {}) == "cog":
+    try:
+        is_using_cog = extras.get("model_framework", {}).get("framework") == "cog"
+    except Exception:
+        pass
+
+    if is_using_cog:
+        try:
+            additional_network = docker_client.networks.create(name="pipeline-net")
+        except Exception as e:
+            _print(f"Couldn't create network pipeline-net:\n{e}", "ERROR")
+            return
         try:
             additional_container = _run_additional_container(
                 docker_client=docker_client,
                 image=f"{pipeline_name}--cog",
                 ports=[5000],
                 gpu_ids=gpu_ids,
+                network=additional_network.name,
             )
         except docker.errors.NotFound as e:
             _print(f"Cog container did not start successfully:\n{e}", "ERROR")
@@ -94,6 +107,16 @@ def up_container(namespace: Namespace):
         environment_variables["LOG_LEVEL"] = "DEBUG"
         environment_variables["FASTAPI_ENV"] = "development"
 
+    if is_using_cog:
+        # our pipeline container in this instance is a wrapper pipeline that
+        # already exists
+        # TODO - update reference
+        image = "localhost:5001/cog-wrapper-pipeline"
+        environment_variables["MODEL_FRAMEWORK"] = "cog"
+        environment_variables["COG_API_URL"] = (
+            f"http://{additional_container.name}:5000"
+        )
+
     if extra_volumes := getattr(namespace, "volume", None):
         if volumes is None:
             volumes = []
@@ -112,7 +135,8 @@ def up_container(namespace: Namespace):
     # Stop container on python exit
     try:
         container = docker_client.containers.run(
-            image=pipeline_name,
+            image=image,
+            name=image.split("/")[-1],
             ports={f"{port}/tcp": int(port)},
             stderr=True,
             stdout=True,
@@ -129,6 +153,7 @@ def up_container(namespace: Namespace):
             command=run_command,
             volumes=volumes,
             environment=environment_variables,
+            network=additional_network.name if additional_network else None,
         )
     except docker.errors.NotFound as e:
         _print(f"Container did not start successfully:\n{e}", "ERROR")
@@ -152,9 +177,12 @@ def up_container(namespace: Namespace):
             _print("Container did not start successfully", "ERROR")
             break
 
+    # TODO - handle clean up better (eg if exception is raised somewhere)
     if additional_container:
         additional_container.stop()
         # additional_container.remove()
+    if additional_network:
+        additional_network.remove()
 
 
 def _run_additional_container(
@@ -163,6 +191,7 @@ def _run_additional_container(
     ports: list[int] | None = None,
     gpu_ids: list | None = None,
     env_vars: dict[str, str] | None = None,
+    network: str | None = None,
 ):
     ports = ports or []
     lc = LogConfig(
@@ -173,6 +202,7 @@ def _run_additional_container(
     )
     container = docker_client.containers.run(
         image=image,
+        name=image.split("/")[-1],
         ports={f"{port}/tcp": port for port in ports},
         stderr=True,
         stdout=True,
@@ -186,5 +216,6 @@ def _run_additional_container(
             else None
         ),
         environment=env_vars or {},
+        network=network,
     )
     return container
