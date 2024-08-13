@@ -14,7 +14,7 @@ from loguru import logger
 
 from pipeline.container.frameworks.cog import CogManager
 from pipeline.container.logging import setup_logging
-from pipeline.container.manager import Manager
+from pipeline.container.manager import PipelineManager
 from pipeline.container.routes import router
 from pipeline.container.services.run import execution_handler
 from pipeline.container.status import router as status_router
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
         pipeline_path = os.environ.get("PIPELINE_PATH")
         if not pipeline_path:
             raise ValueError("PIPELINE_PATH environment variable is not set")
-        app.state.manager = Manager(pipeline_path=pipeline_path)
+        app.state.manager = PipelineManager(pipeline_path=pipeline_path)
     elif model_framework.lower() == "cog":
         logger.debug("Using Cog")
         app.state.manager = CogManager()

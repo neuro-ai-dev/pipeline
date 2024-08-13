@@ -1,7 +1,6 @@
 import mimetypes
 import os
 import time
-import traceback
 import typing as t
 import uuid
 from base64 import b64decode
@@ -16,7 +15,7 @@ from pipeline.cloud.schemas import pipelines as pipeline_schemas
 from pipeline.cloud.schemas import runs as run_schemas
 from pipeline.cloud.schemas.pipelines import IOVariable
 from pipeline.container.manager import Manager
-from pipeline.exceptions import RunInputException, RunnableError
+from pipeline.exceptions import RunInputException
 
 
 @dataclass
@@ -69,10 +68,8 @@ class CogManager(Manager):
     }
 
     def __init__(self):
-        self.pipeline_state: pipeline_schemas.PipelineState = (
-            pipeline_schemas.PipelineState.not_loaded
-        )
-        self.pipeline_state_message: str | None = None
+        super().__init__()
+
         base_url = os.environ.get("COG_API_URL", "http://localhost:5000")
         self.api_client = httpx.Client(base_url=base_url)
 
@@ -83,23 +80,21 @@ class CogManager(Manager):
         self.save_output_files = save_output_files.lower() == "true"
 
     def startup(self):
-        # add context to enable fetching of startup logs
-        with logger.contextualize(pipeline_stage="startup"):
-            logger.info("Waiting for Cog pipeline to startup...")
+        logger.info("Waiting for Cog pipeline to startup...")
 
-            try:
-                self._wait_for_cog_startup(until_fully_ready=False)
-                self.cog_model_inputs, self.cog_model_output = (
-                    self._get_cog_model_inputs_and_output()
-                )
-                self._wait_for_cog_startup(until_fully_ready=True)
-            except Exception as exc:
-                logger.exception("Pipeline failed to startup")
-                self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
-                self.pipeline_state_message = str(exc)
-            else:
-                self.pipeline_state = pipeline_schemas.PipelineState.loaded
-                logger.info("Pipeline started successfully")
+        try:
+            self._wait_for_cog_startup(until_fully_ready=False)
+            self.cog_model_inputs, self.cog_model_output = (
+                self._get_cog_model_inputs_and_output()
+            )
+            self._wait_for_cog_startup(until_fully_ready=True)
+        except Exception as exc:
+            logger.exception("Pipeline failed to startup")
+            self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
+            self.pipeline_state_message = str(exc)
+        else:
+            self.pipeline_state = pipeline_schemas.PipelineState.loaded
+            logger.info("Pipeline started successfully")
 
     def _wait_for_cog_startup(self, until_fully_ready: bool = True):
         max_retries = 100
@@ -226,20 +221,14 @@ class CogManager(Manager):
             inputs[cog_input.name] = run_input.value
         return inputs
 
-    def run(
-        self, run_id: str | None, input_data: list[run_schemas.RunInput] | None
-    ) -> t.Any:
-        with logger.contextualize(run_id=run_id):
-            logger.info("Running Cog pipeline")
-            logger.debug(f"raw inputs = {input_data}")
-            inputs = self._parse_inputs(input_data)
-            logger.debug(f"parsed inputs = {inputs}")
-            try:
-                result = self._call_cog_prediction(inputs)
-                logger.debug(f"{result=}")
-            except Exception as exc:
-                raise RunnableError(exception=exc, traceback=traceback.format_exc())
-            return result
+    def run(self, input_data: list[run_schemas.RunInput] | None) -> t.Any:
+        logger.info("Running Cog pipeline")
+        logger.debug(f"raw inputs = {input_data}")
+        inputs = self._parse_inputs(input_data)
+        logger.debug(f"parsed inputs = {inputs}")
+        result = self._call_cog_prediction(inputs)
+        logger.debug(f"{result=}")
+        return result
 
     def _call_cog_prediction(self, input_data: dict[str, t.Any]):
         try:
