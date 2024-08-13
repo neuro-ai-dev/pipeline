@@ -19,7 +19,8 @@ function PipelineFileResponse({ file }: { file: RunOutputFile }): JSX.Element {
   if (
     file.path.includes("png") ||
     file.path.includes("jpg") ||
-    file.path.includes("jpeg")
+    file.path.includes("jpeg") ||
+    file.path.includes("webp")
   ) {
     return <PipelineRunImage url={blobUrl} alt={file.name} />;
   } else if (
