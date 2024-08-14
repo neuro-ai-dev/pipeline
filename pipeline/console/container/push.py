@@ -52,7 +52,7 @@ def push_container(namespace: Namespace):
             id=cluster_id, node_pool=node_pool_id
         )
 
-    is_cog = is_using_cog(pipeline_config)
+    is_cog = is_using_cog(pipeline_config.extras)
 
     # Check for file, transform to string, and put it back in config
     if pipeline_config.readme is not None:

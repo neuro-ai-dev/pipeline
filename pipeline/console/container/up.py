@@ -51,7 +51,7 @@ def up_container(namespace: Namespace):
     image = pipeline_name
     additional_container = None
     additional_network = None
-    is_cog = is_using_cog(pipeline_config)
+    is_cog = is_using_cog(pipeline_config.extras)
 
     try:
 
