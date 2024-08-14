@@ -1,4 +1,4 @@
-from .schemas import PipelineConfig
+from pipeline.console.container.schemas import PipelineConfig
 
 
 def get_cog_image_name(pipeline_name) -> str:

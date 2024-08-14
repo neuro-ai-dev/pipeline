@@ -4,10 +4,10 @@ from argparse import Namespace
 import yaml
 
 from pipeline.container import docker_templates
+from pipeline.util.frameworks import get_cog_image_name
 from pipeline.util.logging import _print
 
 from .schemas import PipelineConfig, PythonRuntime, RuntimeConfig
-from .utils import get_cog_image_name
 
 
 def convert(namespace: Namespace) -> None:

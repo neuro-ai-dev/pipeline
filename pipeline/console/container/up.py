@@ -7,10 +7,10 @@ import docker.errors
 import yaml
 from docker.types import DeviceRequest, LogConfig
 
+from pipeline.util.frameworks import get_cog_image_name, is_using_cog
 from pipeline.util.logging import _print
 
 from .schemas import PipelineConfig
-from .utils import get_cog_image_name, is_using_cog
 
 
 def up_container(namespace: Namespace):

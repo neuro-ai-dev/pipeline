@@ -12,11 +12,11 @@ from pipeline.cloud import http
 from pipeline.cloud.schemas import cluster as cluster_schemas
 from pipeline.cloud.schemas import pipelines as pipelines_schemas
 from pipeline.cloud.schemas import registry as registry_schemas
+from pipeline.util.frameworks import get_cog_image_name, is_using_cog
 from pipeline.util.logging import _print
 
 from .pointer import create_pointer
 from .schemas import PipelineConfig
-from .utils import get_cog_image_name, is_using_cog
 
 
 def push_container(namespace: Namespace):
