@@ -10,7 +10,7 @@ from docker.types import DeviceRequest, LogConfig
 from pipeline.util.logging import _print
 
 from .schemas import PipelineConfig
-from .utils import get_cog_image_name
+from .utils import get_cog_image_name, is_using_cog
 
 
 def up_container(namespace: Namespace):
@@ -51,15 +51,11 @@ def up_container(namespace: Namespace):
     image = pipeline_name
     additional_container = None
     additional_network = None
-    extras = pipeline_config.extras or {}
-    try:
-        is_using_cog = extras.get("model_framework", {}).get("framework") == "cog"
-    except Exception:
-        pass
+    is_cog = is_using_cog(pipeline_config)
 
     try:
 
-        if is_using_cog:
+        if is_cog:
             try:
                 additional_network = docker_client.networks.create(name="pipeline-net")
             except Exception as e:

@@ -16,7 +16,7 @@ from pipeline.util.logging import _print
 
 from .pointer import create_pointer
 from .schemas import PipelineConfig
-from .utils import get_cog_image_name
+from .utils import get_cog_image_name, is_using_cog
 
 
 def push_container(namespace: Namespace):
@@ -52,8 +52,7 @@ def push_container(namespace: Namespace):
             id=cluster_id, node_pool=node_pool_id
         )
 
-    extras = pipeline_config.extras or {}
-    is_using_cog = extras.get("model_framework", {}).get("framework") == "cog"
+    is_cog = is_using_cog(pipeline_config)
 
     # Check for file, transform to string, and put it back in config
     if pipeline_config.readme is not None:
@@ -72,7 +71,7 @@ def push_container(namespace: Namespace):
     )
     pipeline_yaml_text = "```yaml\n" + pipeline_yaml_text + "\n```"
 
-    if is_using_cog:
+    if is_cog:
         pipeline_code = "This pipeline has been converted from a Cog model"
     else:
         pipeline_code = Path(
@@ -118,7 +117,7 @@ def push_container(namespace: Namespace):
     if upload_registry is None:
         raise ValueError("No upload registry found")
 
-    if is_using_cog:
+    if is_cog:
         local_image_name = get_cog_image_name(pipeline_name)
     else:
         local_image_name = pipeline_name
@@ -146,7 +145,7 @@ def push_container(namespace: Namespace):
         )
 
     image_name = pipeline_name
-    if is_using_cog:
+    if is_cog:
         image_name = get_cog_image_name(pipeline_name)
     remote_image = f"{upload_registry}/{image_name}:{hash_tag}"
 
