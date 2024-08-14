@@ -270,7 +270,9 @@ class CogManager(Manager):
             )
 
         result = response.json()
-        assert result["status"] == "succeeded"
+        logger.debug(f"raw result = {result}")
+        if result["status"] != "succeeded":
+            raise Exception(f"Cog prediction failed: {result['error']}")
         output = result["output"]
         if self.save_output_files:
             output = self._save_output_files(
