@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import mimetypes
 import os
 import time
@@ -39,17 +41,13 @@ class CogInput:
 
 
 @dataclass
-class ArrayItems:
-    python_type: type
-    format: str | None = None
-
-
-@dataclass
 class CogOutput:
     python_type: type
     format: str | None = None
     # only used if python_type=list
-    items: ArrayItems | None = None
+    list_items: CogOutput | None = None
+    # only used if python_type=dict
+    dict_items: dict[str, CogOutput] | None = None
 
     def to_io_schema(self) -> IOVariable:
         return IOVariable(
@@ -73,7 +71,7 @@ class CogManager(Manager):
         self.api_client = httpx.Client(base_url=base_url)
 
         self.cog_model_inputs: list[CogInput] | None = None
-        # Cog models always have a single output
+        # Cog models always have a single output (but can be a list or dict)
         self.cog_model_output: CogOutput | None = None
         save_output_files = os.environ.get("SAVE_OUTPUT_FILES", "")
         self.save_output_files = save_output_files.lower() == "true"
@@ -166,7 +164,7 @@ class CogManager(Manager):
         # make sure they match up.
         cog_inputs.sort(key=lambda x: x.order)
 
-        # Cog models always have a single output (but could be an array)
+        # Cog models always have a single output (but can be a list or dict)
         schema_output = (
             schema.get("components", {}).get("schemas", {}).get("Output", {})
         )
@@ -182,10 +180,22 @@ class CogManager(Manager):
                 raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
             cog_output = CogOutput(
                 python_type=list,
-                items=ArrayItems(
+                list_items=CogOutput(
                     python_type=python_list_type, format=list_items.get("format")
                 ),
             )
+        elif schema_output_type == "object":
+            dict_items = schema_output.get("properties", {})
+            dict_outputs = {}
+            for name, val in dict_items.items():
+                python_type = self.TYPES_MAP.get(val.get("type", "string"))
+                if not python_type:
+                    raise ValueError(f"Unknown model ouput type found: {val['type']}")
+                dict_outputs[name] = CogOutput(
+                    python_type=python_type,
+                    format=val.get("format"),
+                )
+            cog_output = CogOutput(python_type=dict, dict_items=dict_outputs)
         else:
             python_output_type = self.TYPES_MAP.get(schema_output_type)
             if not python_output_type:
@@ -254,17 +264,27 @@ class CogManager(Manager):
             )
         return output
 
-    def _save_output_files(
-        self, output: t.Any, cog_output_spec: CogOutput | ArrayItems | None
-    ):
-        if isinstance(output, list):
-            new_outputs: list[t.Any] = []
+    def _save_output_files(self, output: t.Any, cog_output_spec: CogOutput | None):
+        if not cog_output_spec:
+            return output
+
+        if isinstance(output, list) and cog_output_spec.list_items:
+            new_list_outputs: list[t.Any] = []
             for item in output:
                 new_output = self._save_output_files(
-                    output=item, cog_output_spec=cog_output_spec.items
+                    output=item, cog_output_spec=cog_output_spec.list_items
                 )
-                new_outputs.append(new_output)
-            return new_outputs
+                new_list_outputs.append(new_output)
+            return new_list_outputs
+
+        if isinstance(output, dict) and cog_output_spec.dict_items:
+            new_dict_outputs: dict[str, t.Any] = {}
+            for key, value in output.items():
+                new_output = self._save_output_files(
+                    output=value, cog_output_spec=cog_output_spec.dict_items[key]
+                )
+                new_dict_outputs[key] = new_output
+            return new_dict_outputs
 
         if (
             cog_output_spec is not None
