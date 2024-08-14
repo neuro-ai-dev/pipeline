@@ -31,10 +31,13 @@ class CogInput:
     format: str | None = None
 
     def to_io_schema(self) -> IOVariable:
+        description = self.description
+        if self.format:
+            description += f" (format = {self.format})"
         return IOVariable(
             run_io_type=run_schemas.RunIOType.from_object(self.python_type),
             title=self.title,
-            description=self.description,
+            description=description,
             optional=True,
             default=self.default,
         )
