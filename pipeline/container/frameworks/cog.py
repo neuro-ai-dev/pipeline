@@ -73,7 +73,8 @@ class CogManager(Manager):
         self.api_client = httpx.Client(base_url=base_url)
 
         self.cog_model_inputs: list[CogInput] | None = None
-        self.cog_model_outputs: list[CogOutput] | None = None
+        # Cog models always have a single output
+        self.cog_model_output: CogOutput | None = None
         save_output_files = os.environ.get("SAVE_OUTPUT_FILES", "")
         self.save_output_files = save_output_files.lower() == "true"
 
@@ -82,8 +83,8 @@ class CogManager(Manager):
 
         try:
             self._wait_for_cog_startup(until_fully_ready=False)
-            self.cog_model_inputs, self.cog_model_outputs = (
-                self._get_cog_model_inputs_and_outputs()
+            self.cog_model_inputs, self.cog_model_output = (
+                self._get_cog_model_inputs_and_output()
             )
             self._wait_for_cog_startup(until_fully_ready=True)
         except Exception as exc:
@@ -124,9 +125,9 @@ class CogManager(Manager):
             logger.info("Sleeping for 5s...")
         raise Exception("Cog model failed to load")
 
-    def _get_cog_model_inputs_and_outputs(self):
+    def _get_cog_model_inputs_and_output(self):
         """Returns inputs in same order as they are defined in Cog predict function"""
-        logger.info("Getting Cog model inputs and outputs...")
+        logger.info("Getting Cog model inputs and output...")
         response = self.api_client.get("/openapi.json")
         schema = response.json()
         inputs = (
@@ -165,6 +166,7 @@ class CogManager(Manager):
         # make sure they match up.
         cog_inputs.sort(key=lambda x: x.order)
 
+        # Cog models always have a single output (but could be an array)
         schema_output = (
             schema.get("components", {}).get("schemas", {}).get("Output", {})
         )
@@ -178,50 +180,22 @@ class CogManager(Manager):
             python_list_type = self.TYPES_MAP.get(list_schema_type)
             if not python_list_type:
                 raise ValueError(f"Unknown model ouput type found: {list_schema_type}")
-            cog_outputs = [
-                CogOutput(
-                    python_type=list,
-                    items=ArrayItems(
-                        python_type=python_list_type, format=list_items.get("format")
-                    ),
-                )
-            ]
-        elif schema_output_type == "object":
-            cog_outputs = [CogOutput(python_type=File)]
-            outputs = (
-                schema.get("components", {})
-                .get("schemas", {})
-                .get("Input", {})
-                .get("properties", {})
+            cog_output = CogOutput(
+                python_type=list,
+                items=ArrayItems(
+                    python_type=python_list_type, format=list_items.get("format")
+                ),
             )
-            outputs = schema_output.get("properties", {})
-
-            cog_outputs: list[CogOutput] = []
-            for name, val in outputs.items():
-                if "type" not in val:
-                    logger.info(f"No 'type' found for ouput '{name}'; assuming string")
-                try:
-                    python_type = self.TYPES_MAP[val.get("type", "string")]
-                except KeyError:
-                    raise ValueError(f"Unknown type found: {val['type']}")
-                cog_outputs.append(
-                    CogOutput(
-                        python_type=python_type,
-                        format=val.get("format", None),
-                    )
-                )
         else:
             python_output_type = self.TYPES_MAP.get(schema_output_type)
             if not python_output_type:
                 raise ValueError(
                     f"Unknown model ouput type found: {schema_output_type}"
                 )
-            cog_outputs = [
-                CogOutput(
-                    python_type=python_output_type, format=schema_output.get("format")
-                )
-            ]
-        return cog_inputs, cog_outputs
+            cog_output = CogOutput(
+                python_type=python_output_type, format=schema_output.get("format")
+            )
+        return cog_inputs, cog_output
 
     def _parse_inputs(
         self, input_data: list[run_schemas.RunInput] | None
@@ -276,7 +250,7 @@ class CogManager(Manager):
         output = result["output"]
         if self.save_output_files:
             output = self._save_output_files(
-                output=output, cog_output_spec=self.cog_model_outputs
+                output=output, cog_output_spec=self.cog_model_output
             )
         return output
 
@@ -319,18 +293,16 @@ class CogManager(Manager):
 
     def get_pipeline(self):
         input_variables: list[pipeline_schemas.IOVariable] = []
-        output_variables: list[pipeline_schemas.IOVariable] = []
 
         if self.cog_model_inputs is None:
             raise ValueError("Cog model inputs not found")
-        if self.cog_model_outputs is None:
+        if self.cog_model_output is None:
             raise ValueError("Cog model output not found")
 
         for input in self.cog_model_inputs:
             input_variables.append(input.to_io_schema())
 
-        for output in self.cog_model_outputs:
-            output_variables.append(output.to_io_schema())
+        output_variables: list[IOVariable] = [self.cog_model_output.to_io_schema()]
 
         return pipeline_schemas.Pipeline(
             # TODO - update with real pipeline name? not sure if actually used anywhere?
