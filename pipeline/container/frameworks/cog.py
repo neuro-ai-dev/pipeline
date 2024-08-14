@@ -57,7 +57,6 @@ class CogOutput:
         )
 
 
-# TODO - maybe abstract more stuff out of Manager
 class CogManager(Manager):
 
     TYPES_MAP = {
