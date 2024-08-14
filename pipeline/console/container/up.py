@@ -96,7 +96,8 @@ def up_container(namespace: Namespace):
                 port=port,
                 gpu_ids=gpu_ids if not additional_container else None,
                 environment_variables=environment_variables,
-                # if running Cog then we use GPUs for that container, not pipeline wrapper
+                # if running Cog then we use GPUs for that container, not
+                # pipeline wrapper
                 network=additional_network.name if additional_network else None,
                 extra_volumes=volumes,
                 debug=debug,
