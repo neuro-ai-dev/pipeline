@@ -7,6 +7,7 @@ from pipeline.container import docker_templates
 from pipeline.util.logging import _print
 
 from .schemas import PipelineConfig, PythonRuntime, RuntimeConfig
+from .utils import get_cog_image_name
 
 
 def convert(namespace: Namespace) -> None:
@@ -51,7 +52,7 @@ def convert_cog(pipeline_name: str) -> PipelineConfig:
 
     # build cog image
     # tag image with a standardised name
-    cog_image_name = f"{pipeline_name}--cog"
+    cog_image_name = get_cog_image_name(pipeline_name)
     subprocess.run(
         ["cog", "build", "-t", cog_image_name],
         check=True,

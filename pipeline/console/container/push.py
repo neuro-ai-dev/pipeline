@@ -16,6 +16,7 @@ from pipeline.util.logging import _print
 
 from .pointer import create_pointer
 from .schemas import PipelineConfig
+from .utils import get_cog_image_name
 
 
 def push_container(namespace: Namespace):
@@ -118,7 +119,7 @@ def push_container(namespace: Namespace):
         raise ValueError("No upload registry found")
 
     if is_using_cog:
-        local_image_name = f"{pipeline_name}--cog"
+        local_image_name = get_cog_image_name(pipeline_name)
     else:
         local_image_name = pipeline_name
 
@@ -144,11 +145,10 @@ def push_container(namespace: Namespace):
             cluster=pipeline_config.cluster,
         )
 
+    image_name = pipeline_name
     if is_using_cog:
-        # feels safer to include --cog in name so easily identifiable as a cog image
-        remote_image = f"{upload_registry}/{pipeline_name}--cog:{hash_tag}"
-    else:
-        remote_image = f"{upload_registry}/{pipeline_name}:{hash_tag}"
+        image_name = get_cog_image_name(pipeline_name)
+    remote_image = f"{upload_registry}/{image_name}:{hash_tag}"
 
     _print(f"Pushing image to upload registry {upload_registry}", "INFO")
 

@@ -10,6 +10,7 @@ from docker.types import DeviceRequest, LogConfig
 from pipeline.util.logging import _print
 
 from .schemas import PipelineConfig
+from .utils import get_cog_image_name
 
 
 def up_container(namespace: Namespace):
@@ -67,7 +68,7 @@ def up_container(namespace: Namespace):
             try:
                 additional_container = _run_additional_container(
                     docker_client=docker_client,
-                    image=f"{pipeline_name}--cog",
+                    image=get_cog_image_name(pipeline_name),
                     ports=[5000],
                     gpu_ids=gpu_ids,
                     network=additional_network.name,
