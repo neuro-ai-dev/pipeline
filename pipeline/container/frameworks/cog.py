@@ -75,6 +75,7 @@ class CogManager(Manager):
         self.cog_model_output: CogOutput | None = None
         save_output_files = os.environ.get("SAVE_OUTPUT_FILES", "")
         self.save_output_files = save_output_files.lower() == "true"
+        logger.debug(f"save_output_files = {self.save_output_files}")
 
     def startup(self):
         logger.info("Waiting for Cog pipeline to startup...")
@@ -262,6 +263,8 @@ class CogManager(Manager):
             output = self._save_output_files(
                 output=output, cog_output_spec=self.cog_model_output
             )
+        if not isinstance(output, list):
+            output = [output]
         return output
 
     def _save_output_files(self, output: t.Any, cog_output_spec: CogOutput | None):
