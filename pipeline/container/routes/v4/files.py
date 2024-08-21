@@ -61,7 +61,7 @@ async def upload_local_files_to_storage(
     remote storage, using presigned URL. Files are uploaded in parallel for
     efficiency.
     """
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=False) as client:
         await asyncio.gather(
             *[_upload_file_using_presigned_url(client, file) for file in payload.files]
         )
