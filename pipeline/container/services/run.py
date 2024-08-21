@@ -57,7 +57,7 @@ async def _send_async_result(
     callback_url: str, response_schema: run_schemas.ContainerRunResult
 ):
     logger.info("Sending async result...")
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=False) as client:
         try:
             response = await client.post(
                 callback_url, json=response_schema.dict(), timeout=10
