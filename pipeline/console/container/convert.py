@@ -76,7 +76,7 @@ def convert_cog(pipeline_name: str) -> PipelineConfig:
         pipeline_name=pipeline_name,
         accelerator_memory=None,
         # use a format which permits extra framework-specific options
-        extras={"model_framework": {"framework": "cog", "save_output_files": "false"}},
+        extras={"model_framework": {"framework": "cog", "save_output_files": False}},
         readme="README.md",
     )
     return config

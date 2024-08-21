@@ -81,6 +81,12 @@ def up_container(namespace: Namespace):
             environment_variables["COG_API_URL"] = (
                 f"http://{additional_container.name}:5000"
             )
+            extras = pipeline_config.extras or {}
+            model_framework_options = extras.get("model_framework", {})
+            save_output_files = model_framework_options.get("save_output_files", False)
+            # the default is false
+            if save_output_files:
+                environment_variables["SAVE_OUTPUT_FILES"] = "true"
 
         port = int(getattr(namespace, "port", "14300"))
         debug = getattr(namespace, "debug", False)
