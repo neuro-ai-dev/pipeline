@@ -75,8 +75,7 @@ def up_container(namespace: Namespace):
 
             # our pipeline container in this instance is a wrapper pipeline that
             # already exists
-            # TODO - update reference
-            image = "localhost:5001/cog-wrapper-pipeline"
+            image = "registry.mystic.ai/cog-wrapper-pipeline"
             environment_variables["MODEL_FRAMEWORK"] = "cog"
             environment_variables["COG_API_URL"] = (
                 f"http://{additional_container.name}:5000"
