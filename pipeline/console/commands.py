@@ -220,3 +220,23 @@ def container_parser(command_parser: "_SubParsersAction[ArgumentParser]") -> Non
         help="Name of the pipeline.",
     )
     init_parser.set_defaults(func=container.init_dir)
+
+    # Convert
+    convert_parser = container_sub_parser.add_parser(
+        "convert",
+        description=(
+            "Create a new pipeline by converting a model from a different framework."
+        ),
+        help="Create a new pipeline by converting a model from a different framework.",
+    )
+
+    convert_parser.add_argument(
+        "--name",
+        "-n",
+        type=str,
+        help="Name of the pipeline.",
+    )
+    convert_parser.add_argument(
+        "--type", "-t", type=str, help="Type of model", choices=["cog"], required=True
+    )
+    convert_parser.set_defaults(func=container.convert)

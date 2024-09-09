@@ -12,6 +12,7 @@ from pipeline.cloud import http
 from pipeline.cloud.schemas import cluster as cluster_schemas
 from pipeline.cloud.schemas import pipelines as pipelines_schemas
 from pipeline.cloud.schemas import registry as registry_schemas
+from pipeline.util.frameworks import get_cog_image_name, is_using_cog
 from pipeline.util.logging import _print
 
 from .pointer import create_pointer
@@ -51,6 +52,8 @@ def push_container(namespace: Namespace):
             id=cluster_id, node_pool=node_pool_id
         )
 
+    is_cog = is_using_cog(pipeline_config.extras)
+
     # Check for file, transform to string, and put it back in config
     if pipeline_config.readme is not None:
         if os.path.isfile(pipeline_config.readme):
@@ -66,12 +69,15 @@ def push_container(namespace: Namespace):
         json.loads(readmeless_config.json(exclude_none=True, exclude_unset=True)),
         sort_keys=False,
     )
-
     pipeline_yaml_text = "```yaml\n" + pipeline_yaml_text + "\n```"
-    pipeline_code = Path(
-        pipeline_config.pipeline_graph.split(":")[0] + ".py"
-    ).read_text()
-    pipeline_code = "```python\n" + pipeline_code + "\n```"
+
+    if is_cog:
+        pipeline_code = "This pipeline has been converted from a Cog model"
+    else:
+        pipeline_code = Path(
+            pipeline_config.pipeline_graph.split(":")[0] + ".py"
+        ).read_text()
+        pipeline_code = "```python\n" + pipeline_code + "\n```"
     try:
         pipeline_config.readme = pipeline_config.readme.format(
             pipeline_name=pipeline_config.pipeline_name,
@@ -108,11 +114,18 @@ def push_container(namespace: Namespace):
     registry_info = registry_schemas.RegistryInformation.parse_raw(registry_info.text)
 
     upload_registry = registry_info.url
-
     if upload_registry is None:
         raise ValueError("No upload registry found")
-    image = docker_client.images.get(pipeline_name)
+
+    if is_cog:
+        local_image_name = get_cog_image_name(pipeline_name)
+    else:
+        local_image_name = pipeline_name
+
+    image = docker_client.images.get(local_image_name)
+    assert image.id
     image_hash = image.id.split(":")[1]
+    hash_tag = image_hash[:12]
 
     if turbo_registry:
         if len(image.attrs["RootFS"]["Layers"]) > 1:
@@ -122,66 +135,32 @@ def push_container(namespace: Namespace):
             )
             raise Exception("Failed to push")
 
-    hash_tag = image_hash[:12]
-    image_to_push = pipeline_name + ":" + hash_tag
-    image_to_push_reg = upload_registry + "/" + image_to_push
-
     upload_token = None
-    true_pipeline_name = None
     if registry_info.special_auth:
-        start_upload_response = http.post(
-            endpoint="/v4/registry/start-upload",
-            json_data=pipelines_schemas.PipelineStartUpload(
-                pipeline_name=pipeline_name,
-                pipeline_tag=None,
-                cluster=pipeline_config.cluster,
-                turbo_registry=True if turbo_registry else False,
-                accelerators=pipeline_config.accelerators,
-            ).dict(),
+        pipeline_name = _auth_with_registry(
+            upload_registry=upload_registry,
+            docker_client=docker_client,
+            pipeline_name=pipeline_name,
+            cluster=pipeline_config.cluster,
         )
-        start_upload_dict = start_upload_response.json()
-        upload_token = start_upload_dict.get("bearer", None)
-        true_pipeline_name = start_upload_dict.get("pipeline_name")
 
-        if upload_token is None:
-            raise ValueError("No upload token found")
-
-        # Login to upload registry
-        try:
-            docker_client.login(
-                username="pipeline",
-                password=upload_token,
-                registry="http://" + upload_registry,
-            )
-        except Exception as e:
-            _print(f"Failed to login to registry: {e}", "ERROR")
-            raise
-
-        _print(f"Successfully logged in to registry {upload_registry}")
-
-        # Override the tag with the pipeline name from catalyst
-        image_to_push = true_pipeline_name + ":" + hash_tag
-        image_to_push_reg = upload_registry + "/" + image_to_push
+    image_name = pipeline_name
+    if is_cog:
+        image_name = get_cog_image_name(pipeline_name)
+    remote_image = f"{upload_registry}/{image_name}:{hash_tag}"
 
     _print(f"Pushing image to upload registry {upload_registry}", "INFO")
 
-    docker_client.images.get(pipeline_name).tag(image_to_push_reg)
-    # Do this after tagging, because we need to use
-    # the old pipeline name to tag the local image
-    if true_pipeline_name:
-        pipeline_name = true_pipeline_name
-
+    image.tag(remote_image)
     _push_docker_image(
-        docker_client=docker_client,
-        image=image_to_push_reg,
-        upload_token=upload_token,
+        docker_client=docker_client, image=remote_image, upload_token=upload_token
     )
 
     new_deployment_request = http.post(
         endpoint="/v4/pipelines",
         json_data=pipelines_schemas.PipelineCreate(
             name=pipeline_name,
-            image=image_to_push_reg,
+            image=remote_image,
             input_variables=[],
             output_variables=[],
             accelerators=pipeline_config.accelerators,
@@ -208,10 +187,46 @@ def push_container(namespace: Namespace):
             create_pointer(pointer, new_deployment.id, force=pointer_overwrite)
 
 
-def _push_docker_image(
+def _auth_with_registry(
+    upload_registry: str,
     docker_client: docker.DockerClient,
-    image: str,
-    upload_token: str,
+    pipeline_name: str,
+    cluster: cluster_schemas.PipelineClusterConfig | None = None,
+):
+    response = http.post(
+        endpoint="/v4/registry/start-upload",
+        json_data=pipelines_schemas.PipelineStartUpload(
+            pipeline_name=pipeline_name,
+            pipeline_tag=None,
+            cluster=cluster,
+        ).dict(),
+    )
+    start_upload_response = pipelines_schemas.PipelineStartUploadResponse.parse_obj(
+        response.json()
+    )
+    upload_token = start_upload_response.bearer
+    true_pipeline_name = start_upload_response.pipeline_name
+
+    if upload_token is None:
+        raise ValueError("No upload token found")
+
+    # Login to upload registry
+    try:
+        docker_client.login(
+            username="pipeline",
+            password=upload_token,
+            registry="http://" + upload_registry,
+        )
+    except Exception as e:
+        _print(f"Failed to login to registry: {e}", "ERROR")
+        raise
+
+    _print(f"Successfully logged in to registry {upload_registry}")
+    return true_pipeline_name
+
+
+def _push_docker_image(
+    docker_client: docker.DockerClient, image: str, upload_token: str | None
 ):
     resp = docker_client.images.push(
         image,

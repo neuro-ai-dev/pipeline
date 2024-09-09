@@ -4,12 +4,14 @@ import os
 import traceback
 import typing as t
 import urllib.parse
+from abc import ABC, abstractmethod
 from http.client import InvalidURL
 from pathlib import Path
 from types import NoneType, UnionType
 from urllib import request
 from urllib.parse import urlparse
 
+import yaml
 from loguru import logger
 
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
@@ -31,13 +33,54 @@ def _get_url_or_path(input_schema: run_schemas.RunInput) -> str | None:
     return input_schema.file_url if input_schema.file_url else input_schema.file_path
 
 
-class Manager:
-    def __init__(self, pipeline_path: str):
+class Manager(ABC):
+    def __init__(self):
         self.pipeline_state: pipeline_schemas.PipelineState = (
             pipeline_schemas.PipelineState.not_loaded
         )
         self.pipeline_state_message: str | None = None
         self.current_run: str | None = None
+
+    def startup_pipeline(self):
+        if self.pipeline_state == pipeline_schemas.PipelineState.load_failed:
+            return
+        # add context to enable fetching of startup logs
+        with logger.contextualize(pipeline_stage="startup"):
+            self.startup()
+
+    def run_pipeline(
+        self, run_id: str | None, input_data: t.List[run_schemas.RunInput] | None
+    ) -> t.Any:
+        with logger.contextualize(run_id=run_id):
+            self.current_run = run_id
+            try:
+                result = self.run(input_data)
+            except RunInputException:
+                raise
+            except Exception as exc:
+                raise RunnableError(exception=exc, traceback=traceback.format_exc())
+            finally:
+                self.current_run = None
+            logger.info("Run successful")
+            return result
+
+    @abstractmethod
+    def startup(self) -> None:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def run(self, input_data: t.List[run_schemas.RunInput] | None) -> t.Any:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_pipeline(self) -> pipeline_schemas.Pipeline:
+        raise NotImplementedError()
+
+
+class PipelineManager(Manager):
+    def __init__(self, pipeline_path: str):
+        super().__init__()
+
         try:
             self._load(pipeline_path)
         except Exception:
@@ -90,21 +133,17 @@ class Manager:
             logger.info(f"Pipeline set to {self.pipeline_path}")
 
     def startup(self):
-        if self.pipeline_state == pipeline_schemas.PipelineState.load_failed:
-            return
-        # add context to enable fetching of startup logs
-        with logger.contextualize(pipeline_stage="startup"):
-            logger.info("Starting pipeline")
-            try:
-                self.pipeline._startup()
-            except Exception:
-                tb = traceback.format_exc()
-                logger.exception("Exception raised during pipeline startup")
-                self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
-                self.pipeline_state_message = tb
-            else:
-                self.pipeline_state = pipeline_schemas.PipelineState.loaded
-                logger.info("Pipeline started successfully")
+        logger.info("Starting pipeline")
+        try:
+            self.pipeline._startup()
+        except Exception:
+            tb = traceback.format_exc()
+            logger.exception("Exception raised during pipeline startup")
+            self.pipeline_state = pipeline_schemas.PipelineState.startup_failed
+            self.pipeline_state_message = tb
+        else:
+            self.pipeline_state = pipeline_schemas.PipelineState.loaded
+            logger.info("Pipeline started successfully")
 
     def _resolve_file_variable_to_local(
         self,
@@ -172,7 +211,7 @@ class Manager:
         return variable
 
     def _parse_inputs(
-        self, input_data: t.List[run_schemas.RunInput] | None, graph: Graph
+        self, input_data: t.List[run_schemas.RunInput] | None
     ) -> t.List[t.Any]:
         inputs = []
         if input_data is None:
@@ -199,7 +238,7 @@ class Manager:
 
                 else:
                     inputs.append(input_schema.value)
-        graph_inputs = list(filter(lambda v: v.is_input, graph.variables))
+        graph_inputs = list(filter(lambda v: v.is_input, self.pipeline.variables))
 
         if len(inputs) != len(graph_inputs):
             raise RunInputException("Inputs do not match graph inputs")
@@ -238,20 +277,35 @@ class Manager:
             final_inputs.append(user_input)
         return final_inputs
 
-    def run(
-        self, run_id: str | None, input_data: t.List[run_schemas.RunInput] | None
-    ) -> t.Any:
-        with logger.contextualize(run_id=run_id):
-            logger.info("Running pipeline")
-            self.current_run = run_id
-            try:
-                args = self._parse_inputs(input_data, self.pipeline)
-                result = self.pipeline.run(*args)
-            except RunInputException:
-                raise
-            except Exception as exc:
-                raise RunnableError(exception=exc, traceback=traceback.format_exc())
-            finally:
-                self.current_run = None
-            logger.info("Run successful")
-            return result
+    def run(self, input_data: list[run_schemas.RunInput] | None) -> t.Any:
+        logger.info("Running pipeline")
+        args = self._parse_inputs(input_data)
+        result = self.pipeline.run(*args)
+        return result
+
+    def get_pipeline(self) -> pipeline_schemas.Pipeline:
+        input_variables: list[pipeline_schemas.IOVariable] = []
+        output_variables: list[pipeline_schemas.IOVariable] = []
+
+        for variable in self.pipeline.variables:
+            if variable.is_input:
+                input_variables.append(variable.to_io_schema())
+
+            if variable.is_output:
+                output_variables.append(variable.to_io_schema())
+
+        # Load the YAML file to get the 'extras' field
+        try:
+            with open("/app/pipeline.yaml", "r") as file:
+                pipeline_config = yaml.safe_load(file)
+                extras = pipeline_config.get("extras", {})
+        except Exception as e:
+            raise Exception(f"Failed to load pipeline configuration: {str(e)}")
+
+        return pipeline_schemas.Pipeline(
+            name=self.pipeline_name,
+            image=self.pipeline_image,
+            input_variables=input_variables,
+            output_variables=output_variables,
+            extras=extras,
+        )

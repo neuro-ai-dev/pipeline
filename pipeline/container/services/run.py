@@ -18,7 +18,7 @@ from pipeline.objects.graph import File
 
 async def execution_handler(execution_queue: asyncio.Queue, manager: Manager) -> None:
     with redirect_stdout():
-        await run_in_threadpool(manager.startup)
+        await run_in_threadpool(manager.startup_pipeline)
         while True:
             try:
                 args, response_queue = await execution_queue.get()
@@ -28,7 +28,7 @@ async def execution_handler(execution_queue: asyncio.Queue, manager: Manager) ->
                 with logger.contextualize(run_id=run_id):
                     try:
                         output = await run_in_threadpool(
-                            manager.run, run_id=run_id, input_data=input_data
+                            manager.run_pipeline, run_id=run_id, input_data=input_data
                         )
                     except Exception as e:
                         logger.exception("Exception raised during pipeline execution")

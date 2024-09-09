@@ -1,11 +1,7 @@
-import typing as t
-
-import yaml
 from fastapi import APIRouter, Request, Response
 
 from pipeline.cloud.schemas import pipelines as pipeline_schemas
 from pipeline.container.manager import Manager
-from pipeline.objects import Graph
 
 router = APIRouter(prefix="/container")
 
@@ -56,31 +52,4 @@ async def get_pipeline(request: Request):
     if run_manager.pipeline_state == pipeline_schemas.PipelineState.load_failed:
         raise Exception("Pipeline was never loaded")
 
-    input_variables: t.List[pipeline_schemas.IOVariable] = []
-    output_variables: t.List[pipeline_schemas.IOVariable] = []
-
-    graph: Graph = run_manager.pipeline
-    for variable in graph.variables:
-        if variable.is_input:
-            input_variables.append(variable.to_io_schema())
-
-        if variable.is_output:
-            output_variables.append(variable.to_io_schema())
-
-    input_variables = input_variables
-    output_variables = output_variables
-    # Load the YAML file to get the 'extras' field
-    try:
-        with open("/app/pipeline.yaml", "r") as file:
-            pipeline_config = yaml.safe_load(file)
-            extras = pipeline_config.get("extras", {})
-    except Exception as e:
-        raise Exception(f"Failed to load pipeline configuration: {str(e)}")
-
-    return pipeline_schemas.Pipeline(
-        name=run_manager.pipeline_name,
-        image=run_manager.pipeline_image,
-        input_variables=input_variables,
-        output_variables=output_variables,
-        extras=extras,
-    )
+    return run_manager.get_pipeline()
