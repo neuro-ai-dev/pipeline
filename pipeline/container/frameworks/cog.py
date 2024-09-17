@@ -98,7 +98,7 @@ class CogManager(Manager):
             logger.info("Pipeline started successfully")
 
     def _wait_for_cog_startup(self, until_fully_ready: bool = True):
-        max_retries = 100
+        max_retries = 150
         i = 0
         while i < max_retries:
             i += 1
