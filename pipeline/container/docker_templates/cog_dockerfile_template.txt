@@ -1,0 +1,13 @@
+FROM {base_image} AS initial
+
+FROM scratch
+COPY --from=initial / /
+
+WORKDIR {workdir}
+
+{env}
+
+ENTRYPOINT {entrypoint}
+
+CMD {cmd}
+
