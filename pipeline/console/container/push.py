@@ -149,7 +149,7 @@ def push_container(namespace: Namespace):
         image_name = get_cog_image_name(pipeline_name)
     remote_image = f"{upload_registry}/{image_name}:{hash_tag}"
 
-    _print(f"Pushing image to upload registry {upload_registry}", "INFO")
+    _print(f"Pushing image {remote_image} to upload registry {upload_registry}", "INFO")
 
     image.tag(remote_image)
     _push_docker_image(

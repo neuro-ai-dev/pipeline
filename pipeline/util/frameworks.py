@@ -3,7 +3,7 @@ import typing as t
 
 def get_cog_image_name(pipeline_name) -> str:
     """Use consistent name for cog images"""
-    return f"{pipeline_name}--cog"
+    return f"{pipeline_name}-cog"
 
 
 def is_using_cog(pipeline_extras: dict[str, t.Any] | None) -> bool:
