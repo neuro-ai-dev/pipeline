@@ -2,7 +2,7 @@ import io
 import os
 import typing as t
 
-from pydantic import ValidationError
+from pydantic.v1 import ValidationError
 
 from pipeline.cloud import http
 from pipeline.cloud.files import resolve_run_input_file_object

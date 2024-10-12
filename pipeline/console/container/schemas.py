@@ -1,6 +1,6 @@
 import typing as t
 
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 
 from pipeline.cloud.compute_requirements import Accelerator
 from pipeline.cloud.schemas import cluster as cluster_schemas

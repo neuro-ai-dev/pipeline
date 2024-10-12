@@ -2,7 +2,7 @@ import typing as t
 from enum import Enum
 from math import ceil
 
-from pydantic import conint
+from pydantic.v1 import conint
 
 from . import BaseModel, GenericModel
 

@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from urllib.parse import quote, unquote
 
-from pydantic import root_validator, validator
+from pydantic.v1 import root_validator, validator
 
 from pipeline.cloud.schemas import BaseModel
 

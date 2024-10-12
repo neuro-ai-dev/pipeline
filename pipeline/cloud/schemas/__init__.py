@@ -2,9 +2,9 @@ import os
 from datetime import datetime, timezone
 
 import humps
-from pydantic import BaseModel as _BaseModel
-from pydantic import Extra, validator
-from pydantic.generics import GenericModel as _GenericModel
+from pydantic.v1 import BaseModel as _BaseModel
+from pydantic.v1 import Extra, validator
+from pydantic.v1.generics import GenericModel as _GenericModel
 
 CAMEL_CASE_ALIASES = bool(os.environ.get("CAMEL_CASE_ALIASES", False))
 

@@ -1,7 +1,7 @@
 import re
 import typing as t
 
-from pydantic import validator
+from pydantic.v1 import validator
 
 from pipeline.cloud.schemas import BaseModel
 

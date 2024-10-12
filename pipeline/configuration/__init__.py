@@ -5,7 +5,7 @@ import typing as t
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 
 PIPELINE_DIR = Path(
     os.getenv(
